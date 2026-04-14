@@ -1,8 +1,14 @@
-# ============================================================
-# Phase 5.5 Payload — Full Self-Hosting Polymorphic Replicator
-# ============================================================
+# PAYLOAD: Print "Hello\n" dynamically
+MOV_REG_IMM64  rax, 0x0A6F6C6C6548  # "Hello\n"
+PUSH_REG       rax
+MOV_REG_IMM8   rax, 1               # sys_write
+MOV_REG_IMM8   rdi, 1               # stdout
+MOV_REG_REG    rsi, rsp             # rsp points to string
+MOV_REG_IMM8   rdx, 6               # length
+SYSCALL
+ADD_REG_IMM8   rsp, 8               # stack cleanup
 
-# ---- Section 1 — Construct and Open argv[0] ----
+# Section 1 - Construct and Open argv[0]
 MOV_REG_REG    rdi, rsp
 ADD_REG_IMM8   rdi, 16
 MOV_REG_MEM    rdi, [rdi]   # rdi = argv[0] string pointer
@@ -13,12 +19,12 @@ XOR_REG_REG    rsi, rsi     # O_RDONLY = 0
 SYSCALL
 MOV_REG_REG    r9, rax      # r9 = fd (temporary)
 
-# ---- Section 2 — Set up ELF buffer pointer ----
+# Section 2 - Set up ELF buffer pointer
 MOV_REG_REG    rax, r14
 ADD_REG_IMM32  rax, 0x3000
 MOV_REG_REG    rbx, rax     # rbx = ELF buffer base, PERMANENT
 
-# ---- Section 3 — Read ELF, save elf_size, close fd ----
+# Section 3 - Read ELF, save elf_size, close fd
 MOV_REG_IMM8   rax, 0       # sys_read
 MOV_REG_REG    rdi, r9      # fd
 MOV_REG_REG    rsi, rbx     # buffer = ELF base
@@ -36,7 +42,7 @@ MOV_REG_IMM8   rax, 3
 MOV_REG_REG    rdi, r9
 SYSCALL
 
-# ---- Section 4 — Find alias map magic (0x1122334455667788) ----
+# Section 4 - Find alias map magic (0x1122334455667788)
 MOV_REG_REG    rsi, rbx
 MOV_REG_IMM64  rax, 0x8877665544332210
 INC_REG        rax
@@ -52,7 +58,7 @@ FOUND_ALIAS_MAP:
     ADD_REG_IMM8   rsi, 8       # skip magic bytes
     MOV_REG_REG    r10, rsi     # r10 = alias_map pointer in ELF (hold through section 8)
 
-# ---- Section 4b — Find reg alias map magic (0xAABBCCDDEEFF9988) ----
+# Section 4b - Find reg alias map magic (0xAABBCCDDEEFF9988)
 MOV_REG_REG    rsi, rbx
 MOV_REG_IMM64  rax, 0xAABBCCDDEEFF9987
 INC_REG        rax
@@ -71,7 +77,7 @@ FOUND_REG_ALIAS_MAP:
     ADD_REG_IMM32  rdi, 0xD218
     MOV_MEM_REG    [rdi], rsi
 
-# ---- Section 5 — Generate 114 new unique alias bytes into r14+0xD000 ----
+# Section 5 - Generate 114 new unique alias bytes into r14+0xD000
 MOV_REG_REG    rdi, r14
 ADD_REG_IMM32  rdi, 0xD000     # rdi = write pointer (advances as bytes are stored)
 MOV_REG_IMM    rcx, 114        # need 114 unique nonzero bytes
@@ -112,7 +118,7 @@ UNIQUE_OK:
 
 GEN_ALIAS_DONE:
 
-# ---- Section 5b — Generate 16 shuffled reg_alias bytes into r14+0xD300 ----
+# Section 5b - Generate 16 shuffled reg_alias bytes into r14+0xD300
 # Copy 0..15 straight first
 MOV_REG_REG    rdi, r14
 ADD_REG_IMM32  rdi, 0xD300
@@ -218,7 +224,7 @@ SHUF_HIGH_SKIP:
 SHUFFLE_HIGH_DONE:
 
 
-# ---- Section 6 — Find payload boundaries ----
+# Section 6 - Find payload boundaries
 # Find start magic 0x37133713EFBEADDE
 MOV_REG_REG    rsi, rbx
 MOV_REG_IMM64  rax, 0x37133713EFBEADDD
@@ -261,7 +267,7 @@ FOUND_PAYLOAD_END:
     ADD_REG_IMM32  rdi, 0xD210
     MOV_MEM_REG    [rdi], rcx
 
-# ---- Section 7 — MUTATE_LOOP with dynamic oplen table ----
+# Section 7 - MUTATE_LOOP with dynamic oplen table
 # Construct OPLEN TABLE in scratch space (r14+0xD400)
 MOV_REG_IMM64  rax, 0x0404010505000905
 MOV_REG_REG    rdi, r14
@@ -464,7 +470,7 @@ MUTATE_DONE:
     ADD_REG_IMM32  rax, 0xB000
     SUB_REG_REG    r11, rax        # r11 = mutated_payload_length
 
-# ---- Section 8 — Patch ELF buffer in memory ----
+# Section 8 - Patch ELF buffer in memory
 
 # Patch reg_alias_map (16 bytes):
 MOV_REG_REG    rsi, r14
@@ -526,7 +532,7 @@ PATCH_PAYLOAD_LOOP:
 
 PATCH_PAYLOAD_DONE:
 
-# ---- Section 9 — Generate filename, write child ELF, chmod, exit ----
+# Section 9 - Generate filename, write child ELF, chmod, exit
 # Build 8-char random filename at r14+0xD100
 MOV_REG_REG    rdi, r14
 ADD_REG_IMM32  rdi, 0xD100

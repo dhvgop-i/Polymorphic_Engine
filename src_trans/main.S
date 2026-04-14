@@ -60,9 +60,6 @@ custom_payload:
 custom_payload_end:                          # <-- explicitly mark the end
 .byte 0xFE, 0xEB, 0xDA, 0xED, 0x73, 0x31, 0x73, 0x31
 
-proc_self_exe:
-    .asciz "/proc/self/exe"
-
 # INITIALIZE TRANSLATION TABLE 
 init_table:
     # Clear 2048 bytes (256 * 8) first
