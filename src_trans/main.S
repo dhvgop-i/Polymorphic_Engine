@@ -14,7 +14,7 @@ alias_map:
 alias_mov_reg_imm:       .byte 0x10, 0x11, 0x12
 alias_mov_reg_imm64:     .byte 0x13, 0x14, 0x15
 alias_syscall:           .byte 0x16, 0x17, 0x18
-alias_mov_rsi_msg:       .byte 0x19, 0x1A, 0x1B
+alias_unused:            .byte 0x19, 0x1A, 0x1B
 alias_alu_reg_imm:       .byte 0x1C, 0x1D, 0x1E
 alias_jne_rel8:          .byte 0x1F, 0x20, 0x21
 alias_lea_rsi_rel:       .byte 0x22, 0x23, 0x24
@@ -53,7 +53,6 @@ alias_map_end:
 .byte 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11
 
 # THE PAYLOAD (Custom Bytecode)
-# This will print "Hello" via sys_write(1, msg, 5) and exit(0)
 .byte 0xDE, 0xAD, 0xBE, 0xEF, 0x13, 0x37, 0x13, 0x37
 custom_payload:
 
@@ -61,10 +60,6 @@ custom_payload:
 custom_payload_end:                          # <-- explicitly mark the end
 .byte 0xFE, 0xEB, 0xDA, 0xED, 0x73, 0x31, 0x73, 0x31
 
-# The JIT compiled code will call sys_write with the address of msg.
-# (Phase 6+: We need to change MOV_RSI_MSG to LEA_RSI_REL or similar to handle ASLR properly in children).
-msg:
-    .ascii "Hello\n"
 proc_self_exe:
     .asciz "/proc/self/exe"
 
@@ -96,7 +91,7 @@ ClearTableLoop:
     # Raw Copy:
     INIT_OP 0x13, 0x0400004800B80901 # MOV_REG_IMM64
     INIT_OP 0x16, 0x00000000050F0002 # SYSCALL
-    INIT_OP 0x19, -1                 # MOV_RSI_MSG
+    INIT_OP 0x19, 0x0000000000900001 # UNUSED (Fallback to JNOP)
     INIT_OP 0x1F, 0x0000000000750101 # JNE_REL8
     INIT_OP 0x22, 0x000000358D480403 # LEA_RSI_REL
     INIT_OP 0x25, 0x0000000000680401 # PUSH_IMM32
@@ -183,13 +178,6 @@ _start:
     mov rdi, r14
     call init_table
 
-    # Patch the payload with the address of 'msg' (still a hack for Phase 1)
-    lea rax, [rip + msg]
-    # To write to custom_payload, we have a problem: .text is read-only.
-    # So we MUST do the patching strictly DURING JIT or in the mapped memory.
-    # Since we copy operands verbatim, let's just patch the literal bytes as they 
-    # are written into the JIT buffer.
-    
     # 2. JIT Translation Loop
     lea r12, [rip + custom_payload]  # Source
     lea r13, [rip + custom_payload_end]
@@ -205,9 +193,6 @@ TranslateLoop:
     mov rbx, r14
     mov rdx, qword ptr [rbx + rax * 8]
 
-    cmp rdx, -1
-    je HandleMsgAlias
-    
     mov rcx, rdx
     shr rcx, 56
     cmp rcx, 0
@@ -507,17 +492,3 @@ Error:
     mov rax, 60
     mov rdi, 1
     syscall
-
-
-HandleMsgAlias:
-    # It's our special "load RSI with MSG" alias. 
-    # We want native: mov rsi, <address> (0x48 0xBE <8bytes>)
-    mov word ptr [r15], 0xBE48
-    add r15, 2
-    lea rcx, [rip + msg]
-    mov qword ptr [r15], rcx
-    add r15, 8
-    
-    # Skip the 5 operand bytes in the payload that were placeholders 
-    add r12, 5
-    jmp TranslateLoop

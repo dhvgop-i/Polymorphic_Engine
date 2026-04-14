@@ -6,7 +6,7 @@ INSTRUCTION_OPERAND_SIZES = {
     "MOV_REG_IMM": 5,    
     "MOV_REG_IMM64": 9,
     "SYSCALL": 0,
-    "MOV_RSI_MSG": 5,
+    "UNUSED": 0,
     "ALU_REG_IMM": 5,
     "JNE_REL8": 1,
     "LEA_RSI_REL": 4,
@@ -70,7 +70,6 @@ def x86_len(inst, operands):
     elif inst in ["LEA_RSI_REL", "LEA_RDI_REL"]: return 7
     elif inst == "PUSH_IMM32": return 5
     elif inst == "DATA_8": return 8
-    elif inst == "MOV_RSI_MSG": return 10
     elif inst in ["MOV_REG_REG", "XOR_REG_REG", "SUB_REG_REG", "ADD_REG_REG", "CMP_REG_REG", "MOV_MEM_REG", "MOV_BYTE_MEM_REG", "MOV_REG_MEM"]:
         rex = 1  # 0x48 base REX usually used
         return rex + 1 + 1 # rex + op + modrm
@@ -126,10 +125,6 @@ def pass1(lines):
         parts = line.replace(',', ' ').split()
         if not parts: continue
         inst = parts[0]
-        
-        if inst == "MOV_RSI_MSG":
-            offset += 10    # matches the 10-byte native emit in HandleMsgAlias
-            continue
             
         if inst == ".byte":
             offset += len(parts) - 1
@@ -154,11 +149,6 @@ def pass2(lines, labels):
         parts = line.replace(',', ' ').split()
         inst = parts[0]
         operands = parts[1:]
-        
-        if inst == "MOV_RSI_MSG":
-            output.append(f"    .byte 0x{INSTRUCTIONS['MOV_RSI_MSG'][0]:02X}, 0x00, 0x00, 0x00, 0x00, 0x00  # {line}")
-            offset += 10
-            continue
             
         if inst == ".byte":
             byte_strs = []
