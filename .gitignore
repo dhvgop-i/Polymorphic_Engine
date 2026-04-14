@@ -5,3 +5,8 @@ bin
 __pycache__
 templates
 tmp
+generations
+
+*.inc
+
+payload.inc
