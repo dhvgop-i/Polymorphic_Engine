@@ -40,7 +40,9 @@ INSTRUCTION_OPERAND_SIZES = {
     "MOV_REG_BYTE_MEM": 2,
     "LEA_REG_RIP_REL": 5,
     "JNOP": 0,
-    "ADD_REG_IMM32": 5
+    "ADD_REG_IMM32": 5,
+    "MOV_REG_DWORD_MEM": 2,
+    "XOR_REG_IMM8": 2,
 }
 
 INSTRUCTIONS = {}
@@ -73,6 +75,9 @@ def x86_len(inst, operands):
     elif inst in ["MOV_REG_REG", "XOR_REG_REG", "SUB_REG_REG", "ADD_REG_REG", "CMP_REG_REG", "MOV_MEM_REG", "MOV_BYTE_MEM_REG", "MOV_REG_MEM"]:
         rex = 1  # 0x48 base REX usually used
         return rex + 1 + 1 # rex + op + modrm
+    elif inst == "MOV_REG_DWORD_MEM":
+        # REX (0x40, no W) + 0x8B + ModRM = 3 bytes
+        return 1 + 1 + 1
     elif inst == "MOV_REG_BYTE_MEM":
         return 1 + 2 + 1 # REX + 0F B6 + ModRM
     elif inst == "RDRAND_REG":
@@ -83,7 +88,7 @@ def x86_len(inst, operands):
         return (1 if reg_rex(operands[0]) else 0) + 1
     elif inst == "MOV_REG_IMM8":
         return 1 + 1 + 1 + 4   # REX + 0xC7 + ModRM + imm32
-    elif inst in ["CMP_REG_IMM8", "AND_REG_IMM8", "ADD_REG_IMM8"]:
+    elif inst in ["CMP_REG_IMM8", "AND_REG_IMM8", "ADD_REG_IMM8", "XOR_REG_IMM8"]:
         return 1 + 1 + 1 + 1
     elif inst in ["IMUL_REG_IMM8"]:
         return 1 + 1 + 1 + 1
@@ -220,13 +225,62 @@ def pass2(lines, labels):
         
     return output
 
+def preprocess_includes(lines):
+    """Process .include directives. Path relative to cwd (project root)."""
+    out = []
+    for line in lines:
+        s = line.strip()
+        if s.startswith('.include'):
+            try:
+                path = s.split('"')[1]
+            except IndexError:
+                print(f"Bad .include syntax: {line}")
+                sys.exit(1)
+            if not os.path.exists(path):
+                print(f".include path not found: {path}")
+                sys.exit(1)
+            with open(path) as f:
+                out.extend(f.readlines())
+        else:
+            out.append(line)
+    return out
+
+
+def preprocess_equ(lines):
+    """Strip .equ directives, build symbol table, substitute in remaining lines.
+    Simple text substitution. Use distinctive prefixes (e.g. DELTA_*) to avoid collisions.
+    """
+    equ_table = {}
+    out = []
+    for line in lines:
+        s = line.strip()
+        if s.startswith('.equ'):
+            rest = s[4:].strip()
+            parts = [p.strip() for p in rest.split(',', 1)]
+            if len(parts) == 2:
+                equ_table[parts[0]] = parts[1]
+            continue
+        out.append(line)
+
+    keys = sorted(equ_table.keys(), key=len, reverse=True)
+    out2 = []
+    for line in out:
+        for k in keys:
+            line = line.replace(k, equ_table[k])
+        out2.append(line)
+    return out2
+
+
 def assemble(input_file, output_file):
     with open(input_file, 'r') as f:
         lines = f.readlines()
-        
+
+    lines = preprocess_includes(lines)
+    lines = preprocess_equ(lines)
+
     labels = pass1(lines)
     out_lines = pass2(lines, labels)
-        
+
     with open(output_file, 'w') as f:
         f.write("custom_payload:\n")
         f.write("\n".join(out_lines))

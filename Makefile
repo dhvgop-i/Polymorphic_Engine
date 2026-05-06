@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -nostdlib -fno-stack-protector -g
+CFLAGS = -nostdlib -fno-stack-protector -g -s
 PYTHON = python3
 
 SRC_DIR = src_trans
